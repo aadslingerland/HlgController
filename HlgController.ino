@@ -11,8 +11,8 @@
 //
 #define SUNRISE2_HOUR 16                  // four in the afternoon
 #define SUNSET2_HOUR  10                  // ten in the morning
-#define SUNRISE3_HOUR 16                  // four in the afternoon
-#define SUNSET3_HOUR  04                  // four in the morning
+#define SUNRISE3_HOUR 18                  // four in the afternoon
+#define SUNSET3_HOUR  06                  // four in the morning
 //
 #define DELAY_BUTTON 500UL                // ReadLcdButtonTimed (Unsigned Long)
 #define DELAY_P1 3000UL                   // Delay for P1 before switching on
@@ -176,6 +176,13 @@ boolean dirty_p2_state = true;
 //
 void setup ()
 {
+  //
+  // Initially switch the lights off.
+  //
+  rel.On ();
+  duty_level = DUTY_MAX;
+  analogWrite (PIN_PWM, duty_level);
+  //
   Serial.begin   (9600);
   Serial.println (" ");
   Serial.println (APP);
