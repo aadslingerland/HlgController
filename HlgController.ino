@@ -60,7 +60,7 @@ enum AnalogousValues : int
 //
 // Determine which button has been pressed.
 //
-int ReadLcdButton ()
+byte ReadLcdButton ()
 {
   int btn_val = analogRead (0);
   //
@@ -162,6 +162,7 @@ enum P1_states : byte
   P1_ON      = 1
 };
 byte current_p1_state = P1_WAITING;
+unsigned long p1_entry_time = 0;
 //
 enum P2_states : byte
 {
@@ -252,7 +253,7 @@ void loop ()
   // values because the PWM signal amplifier does an inversion.
   //
   int p_num = map (duty_level, 0, 255, 100, 0);
-  char p_str[6];
+  char p_str[5];
   snprintf (p_str, sizeof(p_str), "%3d%%", p_num);
   lcd.setCursor (12, 1);
   lcd.print (p_str);
@@ -260,7 +261,6 @@ void loop ()
   // Set the cursor for the button text.
   //
   lcd.setCursor (0, 1);
-  //
   byte button = ReadLcdButtonTimed ();
   //
   switch (button)
@@ -326,13 +326,7 @@ void set_state_select ()
       break;
   }
   //
-  // Save current main state for Setup ().
-  //
-  rtc.writeRam (0, current_main_state);
-  //
-  // Indicate that an initial substate for P2 P3 should be done.
-  //
-  dirty_p2_state = true;
+  SaveMainStateAndFlagSomeThings ();
 }
 //
 // Switch to a higher main state (program) when the UP button is pressed.
@@ -357,13 +351,7 @@ void set_state_up ()
       break;
   }
   //
-  // Save current main state for Setup ().
-  //
-  rtc.writeRam (0, current_main_state);
-  //
-  // Indicate that an initial substate for P2 P3 should be done.
-  //
-  dirty_p2_state = true;
+  SaveMainStateAndFlagSomeThings ();
 }
 //
 // Switch to a lower main state (program) when the DOWN button is pressed.
@@ -388,28 +376,27 @@ void set_state_down ()
       break;
   }
   //
-  // Save current main state for Setup ().
-  //
+  SaveMainStateAndFlagSomeThings ();
+}
+//
+// Save current main state for Setup ().
+// Indicate that an initial substate for P2/P3 should be done.
+// The value of current_p1_state is set to P1_WAITING because the
+// run_P1 () function has no way to find out when to do so. The value
+// for p1_entry_time set to 0 for the same reason.
+//
+void SaveMainStateAndFlagSomeThings ()
+{
   rtc.writeRam (0, current_main_state);
-  //
-  // Indicate that an initial substate for P2 P3 should be done.
-  //
   dirty_p2_state = true;
+  current_p1_state = P1_WAITING;
+  p1_entry_time = 0;
 }
 //
 // Run one of the main programs (state).
 //
 void run_main ()
 {
-  //
-  // First the value of current_p1_state is set to P1_WAITING because the
-  // run_P1 () function has no way to find out when to do so.
-  //
-  if (current_main_state != STATE_P1)
-  {
-    current_p1_state = P1_WAITING;
-  }
-  //
   switch (current_main_state)
   {
     case STATE_P0:
@@ -448,13 +435,11 @@ void run_P1 ()
 {
   Serial.println ("run_P1");
   //
-  static unsigned long entry_time = 0;
   boolean rb = false;
-  //
   switch (current_p1_state)
   {
     case P1_WAITING:
-      if (entry_time == 0)
+      if (p1_entry_time == 0)
       {
         Serial.println ("run_P1: switching off.....");
         //
@@ -462,24 +447,23 @@ void run_P1 ()
         duty_level = DUTY_MAX;
         analogWrite (PIN_PWM, duty_level);
         //
-        entry_time = millis ();
+        p1_entry_time = millis ();
         //
         Serial.print   ("run_P1: entry_time=");
-        Serial.println (entry_time);
+        Serial.println (p1_entry_time);
       }
-      rb = HasTimedWaitPassed (entry_time, DELAY_P1);
-      if (rb == true)
+      else
       {
-        current_p1_state = P1_ON;
-        entry_time = 0;                   // reset this for the next time
-        //
-        Serial.println ("run_P1: switching to P1_ON state");
+        rb = HasTimedWaitPassed (p1_entry_time, DELAY_P1);
+        if (rb == true)
+        {
+          current_p1_state = P1_ON;
+          Serial.println ("run_P1: switching to P1_ON state");
+        }
       }
       break;
 
     case P1_ON:
-      entry_time = 0;                     // reset this for the next time
-      //
       rel.Off ();
       duty_level = DUTY_MIN;
       analogWrite (PIN_PWM, duty_level);
@@ -498,14 +482,13 @@ void run_P2 (byte this_sunrise, byte this_sunset)
   Serial.print   (", this_sunset=");
   Serial.println (this_sunset);
   //
-  boolean rb;
+  //boolean rb;
   Time this_time = rtc.time();
   //
   Serial.print   ("run_P2: millis=");
   Serial.println (millis ());
   //
-  // Are we in the first (half) second that this program is runing?
-  // Or, was the main program state changed from 2 to 3 or vice versa?
+  // Was the main program state changed from 2 to 3 or vice versa?
   // If so, proceed with adjusting the initial current_p2_state.
   // Adjusting the initial state is important for the very first time this
   // program runs and, more important, in the case of a power outage.
@@ -513,13 +496,13 @@ void run_P2 (byte this_sunrise, byte this_sunset)
   if (dirty_p2_state == true)
   {
     dirty_p2_state = false;
-    current_p2_state = P2_OFF;             // assume this, unless proven otherwise
+    current_p2_state = P2_OFF;              // assume this, unless proven otherwise
     //
-    if (this_time.hr == this_sunrise)      // inside the sunrise hour?
+    if (this_time.hr == this_sunrise)       // inside the sunrise hour?
     {
-      if (this_time.min < (countdown / 60))// inside the countdown?
+      if (this_time.min < (countdown / 60)) // inside the countdown?
       {
-        current_p2_state = P2_SUNRISE;     // a new awakening
+        current_p2_state = P2_SUNRISE;      // a new awakening
       }
       else
       {
@@ -557,8 +540,7 @@ void run_P2 (byte this_sunrise, byte this_sunset)
 
     case P2_SUNRISE:
       rel.Off ();
-      rb = SunRise ();
-      if (rb == true)
+      if (SunRise () == true)
       {
         current_p2_state = P2_ON;
         //
@@ -580,8 +562,7 @@ void run_P2 (byte this_sunrise, byte this_sunset)
       break;
 
     case P2_SUNSET:
-      rb = SunSet ();
-      if (rb == true)
+      if (SunSet () == true)
       {
         current_p2_state = P2_OFF;
         //
@@ -701,6 +682,10 @@ boolean SunSet ()
 boolean HasTimedWaitPassed (unsigned long entry_time, unsigned int wait)
 {
   boolean rb = false;                     // assume not yet passed
+  //
+  // Make sure there is at least 1 millisecond beteen entry_time und this_time.
+  //
+  delay (1);
   unsigned long this_time = millis ();
   //
   Serial.print   ("HasTimedWaitPassed: this_time=");
