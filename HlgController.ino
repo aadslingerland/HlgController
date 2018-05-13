@@ -179,7 +179,7 @@ void setup ()
   //
   // Initially switch the lights off.
   //
-  rel.On ();
+  rel.Off ();
   duty_level = DUTY_MAX;
   analogWrite (PIN_PWM, duty_level);
   //
@@ -430,7 +430,7 @@ void run_P0 ()
 {
   Serial.println ("run_P0");
   //
-  rel.On ();
+  rel.Off ();
   duty_level = DUTY_MAX;
   analogWrite (PIN_PWM, duty_level);
 }
@@ -450,7 +450,7 @@ void run_P1 ()
       {
         Serial.println ("run_P1: switching off.....");
         //
-        rel.On ();
+        rel.Off ();
         duty_level = DUTY_MAX;
         analogWrite (PIN_PWM, duty_level);
         //
@@ -471,7 +471,7 @@ void run_P1 ()
       break;
 
     case P1_ON:
-      rel.Off ();
+      rel.On ();
       duty_level = DUTY_MIN;
       analogWrite (PIN_PWM, duty_level);
       break;
@@ -489,7 +489,6 @@ void run_P2 (byte this_sunrise, byte this_sunset)
   Serial.print   (", this_sunset=");
   Serial.println (this_sunset);
   //
-  //boolean rb;
   Time this_time = rtc.time();
   //
   Serial.print   ("run_P2: millis=");
@@ -533,7 +532,7 @@ void run_P2 (byte this_sunrise, byte this_sunset)
   switch (current_p2_state)
   {
     case P2_OFF:
-      rel.On ();
+      rel.Off ();
       duty_level = DUTY_MAX;
       analogWrite (PIN_PWM, duty_level);
       //
@@ -546,7 +545,7 @@ void run_P2 (byte this_sunrise, byte this_sunset)
       break;
 
     case P2_SUNRISE:
-      rel.Off ();
+      rel.On ();
       if (SunRise () == true)
       {
         current_p2_state = P2_ON;
@@ -556,7 +555,7 @@ void run_P2 (byte this_sunrise, byte this_sunset)
       break;
 
     case P2_ON:
-      rel.Off ();
+      rel.On ();
       duty_level = DUTY_MIN;
       analogWrite (PIN_PWM, duty_level);
       //
